@@ -1,59 +1,27 @@
 import json
+import os
 import time
+from datetime import datetime
 
 import requests
-from lxml import etree
-from selenium import webdriver
-from selenium.common import NoSuchElementException
-from selenium.webdriver import ActionChains
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from urllib3.util import wait
-from lxml import html
+from openpyxl.workbook import Workbook
 from playwright.sync_api import sync_playwright
 
 
-def user_login(driver):
-    # 读取用户名和密码
-    with open('user.txt', 'r') as file:
-        lines = file.readlines()
-        username = lines[0].split(': ')[1].strip()
-        password = lines[1].split(': ')[1].strip()
-
-    # 打开登录网页
-    login_url = 'https://passport.jctrans.com/login'
-    driver.get(login_url)
-
-    switch_input = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[1]/div[2]/div[2]/img')
-    switch_input.click()
-
-    # 定位用户名输入框并输入用户名
-    username_input = driver.find_element(By.XPATH,
-                                         '/html/body/div[1]/div[2]/div[1]/div[2]/div[3]/div[3]/div[1]/div[2]/div[1]/form/div[1]/div/div/div/div/div/input')
-    username_input.send_keys(username)
-
-    # 定位密码输入框并输入密码
-    password_input = driver.find_element(By.XPATH,
-                                         '/html/body/div[1]/div[2]/div[1]/div[2]/div[3]/div[3]/div[1]/div[2]/div[1]/form/div[2]/div/div/div/div/div/input')
-    password_input.send_keys(password)
-
-    # 点击登录按钮
-    login_button = driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div[1]/div[2]/div[3]/div[3]/div[3]/button')
-    login_button.click()
-
-    time.sleep(10)
-
-    cookies = driver.get_cookies()
-    # 添加异常处理，捕获可能出现的异常
-    try:
-        # 执行其他操作
-        pass
-    except NoSuchElementException as e:
-        print("Element not found: ", e)
-    driver.close()
-    return cookies
+def create_excel(data, filename):
+    # 创建一个新的 Excel 工作簿
+    wb = Workbook()
+    ws = wb.active
+    # 将数据写入工作表
+    for row in data:
+        ws.append(row)
+    # 保存 Excel 文件
+    directory = 'data'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    filename = os.path.join(directory, filename)
+    wb.save(filename)
+    print("创建成功：", filename)
 
 
 def post(url, data):
@@ -68,50 +36,48 @@ def post(url, data):
 
 
 # 获取所有的公司uid
-def get_all_uid():
-    # driver = webdriver.Chrome()
-    # home_url = 'https://jctrans.com/cn/membership/list?countryId=suJGxhhfuX5knrcfkHDRZg%3D%3D&redirectFrom=ERA' # 斯里兰卡
-    # driver.get(home_url)
+def get_all_uid(country_id):
     url = 'https://cloudapi.jctrans.com/era/fr/shop/companyDirectory'
     data = {
         "current": 1,
-        "size": 20,
+        "size": 100000,
         "advCodeList": [],
         "vipCodeList": [],
         "minVipTotalYears": 0,
         "maxVipTotalYears": 150,
-        "countryId": 67
+        "countryId": country_id
     }
-    print('countryId：', 67)
     response = post(url, data)
     if response.status_code == 200:
         uid_list = []
         response_data = response.json()
         if 'data' in response_data:
-            print('uId总数：', response_data['data']['total'])
+            total = response_data['data']['total']
             data_records = response_data['data']['records']
             if data_records:
                 for record in data_records:
                     if 'uid' in record:
                         uid = record['uid']
                         uid_list.append(uid)
-            return uid_list
+            print(f"country_id:{country_id},total:{total}")
+            return uid_list, total
         else:
             print('未找到 uid 字段')
     else:
         print('POST 请求失败')
 
 
-def get_index_context(url, cookies):
+def get_index_context(url, cookie_value):
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page()
-
-        # 设置附带 cookie 的请求头
-        headers = {
-            'Cookie': '; '.join([f"{cookie['name']}={cookie['value']}" for cookie in cookies])
-        }
-        page.set_extra_http_headers(headers)
+        context = browser.new_context()
+        page = context.new_page()
+        context.add_cookies([{
+            "domain": ".jctrans.com",
+            "name": "JC-JAVA-Token",
+            "path": "/",
+            "value": cookie_value
+        }])
 
         page.goto(url)
 
@@ -130,20 +96,22 @@ def get_index_context(url, cookies):
 
 
 def main():
-    uid_list = get_all_uid()
+    cookie_value = "d729c67db0b2489d9ad4080670528b0b"
+    country_id = 67
+    uid_list, total = get_all_uid(country_id)
+    index_data_list = [[]]
     for uid in uid_list:
         # https://www.jctrans.com/cn/home/963d2723459700775661af809ad2a1d9
         url = 'https://www.jctrans.com/cn/home/' + uid
         # print(url)
-        company, email = get_index_context(url)
+        company, email = get_index_context(url, cookie_value)
+        index_data_list.append([company, email])
         print(company, email)
+    # 创建xlsx
+    current_time = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f"斯里兰卡_{country_id}_{total}_{current_time}.xlsx"
+    create_excel(index_data_list, filename)
 
 
 if __name__ == '__main__':
-    # main()
-    driver = webdriver.Chrome()
-    cookies = user_login(driver)
-    print(cookies)
-    company, email = get_index_context('https://www.jctrans.com/cn/home/963d2723459700775661af809ad2a1d9', cookies)
-    print(company, email)
-
+    main()
