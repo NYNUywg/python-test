@@ -113,15 +113,21 @@ def get_all_uid(country_id):
 
 
 async def get_index_context(page, url):
+    company = ""
+    email = ""
+    phone = ""
     await page.goto(url)
     await page.wait_for_load_state('networkidle')
 
     h1_elements = await page.locator('xpath=//h1').all()
-    company = await h1_elements[2].inner_text()
+    if len(h1_elements) >= 2:
+        company = await h1_elements[2].inner_text()
 
     content_elements = await page.locator('.content').all()
-    email = await content_elements[-3].inner_text()
-    phone = await content_elements[-2].inner_text()
+    if len(content_elements) >= 3:
+        email = await content_elements[-3].inner_text()
+    if len(content_elements) >= 2:
+        phone = await content_elements[-2].inner_text()
     if "@" in email:
         pass
     else:
