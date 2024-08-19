@@ -5,7 +5,7 @@ from datetime import datetime
 
 import requests
 from openpyxl.workbook import Workbook
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 
 def create_excel(data, filename):
@@ -67,51 +67,62 @@ def get_all_uid(country_id):
         print('POST 请求失败')
 
 
-def get_index_context(url, cookie_value):
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context()
-        page = context.new_page()
-        context.add_cookies([{
+async def get_index_context(page, url):
+    company = ""
+    email = ""
+    phone = ""
+    await page.goto(url)
+    await page.wait_for_load_state('networkidle')
+
+    h1_elements = await page.locator('xpath=//h1').all()
+    if len(h1_elements) >= 2:
+        company = await h1_elements[2].inner_text()
+
+    content_elements = await page.locator('.content').all()
+    if len(content_elements) >= 3:
+        email = await content_elements[-3].inner_text()
+    if len(content_elements) >= 2:
+        phone = await content_elements[-2].inner_text()
+    if "@" in email:
+        pass
+    else:
+        email = phone
+        phone = ""
+    return company, email, phone
+
+
+async def main():
+    cookie_value = "b1a5bfe5040b4ecea0860368c4b321e2"
+    country_id = 67
+    uid_list, total = get_all_uid(country_id)
+    index_data_list = [[]]
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        context = await browser.new_context()
+        page = await context.new_page()
+        await context.add_cookies([{
             "domain": ".jctrans.com",
             "name": "JC-JAVA-Token",
             "path": "/",
             "value": cookie_value
         }])
 
-        page.goto(url)
+        count = 0
+        for uid in uid_list:
+            url = 'https://www.jctrans.com/cn/home/' + uid
+            company, email, phone = await get_index_context(page, url)
+            count += 1
+            print(count, company, email, phone)
+            index_data_list.append([company, email, phone])
+        await browser.close()
 
-        page.wait_for_load_state('networkidle')
-
-        # 获取公司名称
-        h1_elements = page.locator('xpath=//h1').all()
-        company = h1_elements[2].inner_text()
-
-        # 获取邮箱
-        content_elements = page.locator('.content').all()
-        email = content_elements[-2].inner_text()
-
-        browser.close()
-        return company, email
-
-
-def main():
-    cookie_value = "d729c67db0b2489d9ad4080670528b0b"
-    country_id = 67
-    uid_list, total = get_all_uid(country_id)
-    index_data_list = [[]]
-    for uid in uid_list:
-        # https://www.jctrans.com/cn/home/963d2723459700775661af809ad2a1d9
-        url = 'https://www.jctrans.com/cn/home/' + uid
-        # print(url)
-        company, email = get_index_context(url, cookie_value)
-        index_data_list.append([company, email])
-        print(company, email)
-    # 创建xlsx
     current_time = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S')
-    filename = f"斯里兰卡_{country_id}_{total}_{current_time}.xlsx"
+    filename = f"巴基斯坦_{country_id}_{total}_{current_time}.xlsx"
     create_excel(index_data_list, filename)
 
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+
+    asyncio.run(main())
