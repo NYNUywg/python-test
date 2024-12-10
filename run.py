@@ -1,14 +1,10 @@
 import json
 import os
-import time
-from datetime import datetime
 
 import requests
 from openpyxl.reader.excel import load_workbook
 from openpyxl.workbook import Workbook
 from playwright.async_api import async_playwright
-from pyppeteer import launch
-import asyncio
 
 
 def append_to_excel(data, filename):
@@ -40,11 +36,8 @@ def post(url, data):
 
 
 # 获取所有的公司uid
-def get_all_uid():
-    country_id = 68
+def get_all_uid(country_id,country_name,total):
     uid_list = []
-    country_name = "United Arab Emirates"
-    total = 2259
 
     # 读取文件
     workbook_path = f"./data/{country_name}_{country_id}_{total}.xlsx"
@@ -99,9 +92,8 @@ async def fetch_data_with_retry(page, url, retry=10):
     return None, None, None
 
 
-async def main():
-    cookie_value = "b5b265dab3384e84b9c6789dd951d458"
-    country_name, country_id, uid_list, total = get_all_uid()
+async def main(cookie_value, country_id, country_name, total):
+    country_name, country_id, uid_list, total = get_all_uid(country_id,country_name,total)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -116,7 +108,7 @@ async def main():
 
         count = 0
         for uid in uid_list:
-            url = 'https://www.jctrans.com/cn/home/' + uid
+            url = 'https://www.jctrans.com/cn/store/home/' + uid
             company, email, phone = await fetch_data_with_retry(page, url)
             count += 1
             print(count, company, email, phone)
@@ -125,7 +117,4 @@ async def main():
         await browser.close()
 
 
-if __name__ == '__main__':
-    import asyncio
 
-    asyncio.run(main())

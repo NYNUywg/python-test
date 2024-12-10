@@ -23,15 +23,15 @@ def post(url, data):
 
 
 # 获取所有的公司uid
-def get_all_uid():
-    country_id = 7
+def find_all_uid():
+    country_id = 68
 
     for i in range(1, 10):
         print("i", i)
         url = 'https://cloudapi.jctrans.com/era/fr/shop/companyDirectory'
         data = {
             "current": i,
-            "size": 1000,
+            "size": 500,
             "advCodeList": [],
             "vipCodeList": [],
             "minVipTotalYears": 0,
@@ -70,7 +70,7 @@ def get_all_uid():
 
 
 def main():
-    get_all_uid()
+    find_all_uid()
     return
 
 
