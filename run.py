@@ -93,11 +93,14 @@ async def fetch_data_with_retry(page, url, retry=10):
 
 
 async def main(cookie_value, country_id, country_name, total):
+    cookie_value = "6de5eb92274c4f6ebf8726866c125606"
     country_name, country_id, uid_list, total = get_all_uid(country_id,country_name,total)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
-        context = await browser.new_context()
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+        # context = await browser.new_context()
         page = await context.new_page()
         await context.add_cookies([{
             "domain": ".jctrans.com",
