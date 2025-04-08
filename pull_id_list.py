@@ -24,7 +24,7 @@ def post(url, data):
 
 # 获取所有的公司uid
 def find_all_uid():
-    country_id = 68
+    country_id = 85
 
     for i in range(1, 10):
         print("i", i)
