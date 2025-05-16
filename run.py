@@ -53,7 +53,7 @@ def get_all_uid(country_id,country_name,total):
             if line_number < start_line_number:
                 continue
             uid_list.append(line.strip())
-    return country_name, country_id, uid_list, total
+    return country_name, country_id, uid_list, total, start_line_number
 
 
 async def get_index_context(page, url):
@@ -93,8 +93,8 @@ async def fetch_data_with_retry(page, url, retry=10):
 
 
 async def main(cookie_value, country_id, country_name, total):
-    cookie_value = "6de5eb92274c4f6ebf8726866c125606"
-    country_name, country_id, uid_list, total = get_all_uid(country_id,country_name,total)
+    cookie_value = "c24e3079c68742e0a98a20cf1a1d68d0"
+    country_name, country_id, uid_list, total, count = get_all_uid(country_id,country_name,total)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch()
@@ -109,7 +109,7 @@ async def main(cookie_value, country_id, country_name, total):
             "value": cookie_value
         }])
 
-        count = 0
+        # count = 0
         for uid in uid_list:
             url = 'https://www.jctrans.com/cn/store/home/' + uid
             company, email, phone = await fetch_data_with_retry(page, url)

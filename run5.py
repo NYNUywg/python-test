@@ -3,8 +3,8 @@ import asyncio
 from run import main
 
 if __name__ == '__main__':
-    cookie_value = "b5b265dab3384e84b9c6789dd951d458"
-    country_id = 84
-    country_name = "Oman"
-    total = 210
+    cookie_value = ""
+    country_id = 7
+    country_name = "Egypt"
+    total = 986
     asyncio.run(main(cookie_value, country_id, country_name, total))
