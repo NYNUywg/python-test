@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 import requests
 from openpyxl.reader.excel import load_workbook
@@ -18,9 +19,9 @@ def append_to_excel(data, filename):
     else:
         wb = Workbook()
         ws = wb.active
-    # for row in data:
-    ws.append(data)
-
+    # 过滤每个字段
+    clean_data = [clean_excel_string(x) for x in data]
+    ws.append(clean_data)
     wb.save(filename)
 
 
@@ -62,10 +63,10 @@ async def get_index_context(page, url):
     phone = ""
     await page.goto(url)
     await page.wait_for_load_state('networkidle')
-
-    h1_elements = await page.locator('xpath=//h1').all()
-    if len(h1_elements) >= 2:
-        company = await h1_elements[1].inner_text()
+    await page.wait_for_selector('xpath=//*[@id="__nuxt"]/div/div[2]/div/div[2]/main/div/section/div/div/div[2]/div[1]/div[1]/div[1]/div[2]/p', timeout=60000)
+    company_element = page.locator('xpath=//*[@id="__nuxt"]/div/div[2]/div/div[2]/main/div/section/div/div/div[2]/div[1]/div[1]/div[1]/div[2]/p')
+    if await company_element.count() > 0:
+        company = await company_element.first.inner_text()
 
     content_elements = await page.locator('.content').all()
     if len(content_elements) >= 2:
@@ -93,7 +94,7 @@ async def fetch_data_with_retry(page, url, retry=10):
 
 
 async def main(cookie_value, country_id, country_name, total):
-    cookie_value = "c24e3079c68742e0a98a20cf1a1d68d0"
+    cookie_value = "e49894fe8726412cbf959d9eff911748"
     country_name, country_id, uid_list, total, count = get_all_uid(country_id,country_name,total)
 
     async with async_playwright() as p:
@@ -104,7 +105,7 @@ async def main(cookie_value, country_id, country_name, total):
         page = await context.new_page()
         await context.add_cookies([{
             "domain": ".jctrans.com",
-            "name": "JC-JAVA-Token",
+            "name": "JC-JAVA-Token-Root",
             "path": "/",
             "value": cookie_value
         }])
@@ -118,6 +119,13 @@ async def main(cookie_value, country_id, country_name, total):
             filename = f"{country_name}_{country_id}_{total}.xlsx"
             append_to_excel([company, email, phone], filename)
         await browser.close()
+
+
+def clean_excel_string(s):
+    if isinstance(s, str):
+        # 去除所有非法字符
+        return re.sub(r'[\x00-\x1F\x7F-\x9F]', '', s)
+    return s
 
 
 
