@@ -135,19 +135,27 @@ async def get_index_context(page, url):
             text = await elem.inner_text()
             print(f"  .content[{i}]: {text[:50]}...")
         
-        if len(content_elements) >= 2:
-            phone = await content_elements[-2].inner_text()
-            phone = phone.strip()
-            print(f"Phone (from -2): {phone}")
-
-        if "@" in phone:
-            email = phone
-            phone = ""
-        else:
-            if len(content_elements) >= 3:
-                email = await content_elements[-3].inner_text()
-                email = email.strip()
-                print(f"Email (from -3): {email}")
+        # Extract email and phone by searching through all content elements
+        for elem in content_elements:
+            text = await elem.inner_text()
+            text = text.strip()
+            
+            # Find email (contains @)
+            if "@" in text and not email:
+                email = text
+                print(f"Found email: {email}")
+            
+            # Find phone (starts with + or is all digits, and length between 7-15)
+            # Skip if it contains @ (to avoid email addresses)
+            if not phone and "@" not in text:
+                # Check if it looks like a phone number
+                clean_text = text.replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+                if clean_text.isdigit() and 7 <= len(clean_text) <= 15:
+                    # Prefer the one with + prefix if available
+                    if not phone or (text.startswith("+") and not phone.startswith("+")):
+                        phone = text
+                        print(f"Found phone: {phone}")
+        
     except Exception as e:
         print(f"Error getting contact info: {e}")
     
@@ -172,8 +180,8 @@ async def fetch_data_with_retry(page, url, retry=3):  # Reduced retry for debugg
     return None, None, None
 
 
-async def main(cookie_value, country_id, country_name, total):
-    cookie_value = "e49894fe8726412cbf959d9eff911748"
+async def main(country_id, country_name, total):
+    cookie_value = "b7f5a216bf394d1cac4d2a394da0617a"
     country_name, country_id, uid_list, total, count = get_all_uid(country_id,country_name,total)
     
     # Only process first UID for debugging

@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import asyncio
+import random
 
 import requests
 from openpyxl.reader.excel import load_workbook
@@ -61,48 +63,107 @@ async def get_index_context(page, url):
     company = ""
     email = ""
     phone = ""
-    await page.goto(url)
-    await page.wait_for_load_state('networkidle')
-    await page.wait_for_selector('xpath=//*[@id="__nuxt"]/div/div[2]/div/div[2]/main/div/section/div/div/div[2]/div[1]/div[1]/div[1]/div[2]/p', timeout=60000)
-    company_element = page.locator('xpath=//*[@id="__nuxt"]/div/div[2]/div/div[2]/main/div/section/div/div/div[2]/div[1]/div[1]/div[1]/div[2]/p')
-    if await company_element.count() > 0:
-        company = await company_element.first.inner_text()
-
-    content_elements = await page.locator('.content').all()
-    if len(content_elements) >= 2:
-        phone = await content_elements[-2].inner_text()
-
-    if "@" in phone:
-        email = phone
-        phone = ""
+    
+    # 增加超时时间并使用 domcontentloaded 而不是 load
+    await page.goto(url, timeout=60000, wait_until='domcontentloaded')
+    await page.wait_for_load_state('networkidle', timeout=60000)
+    
+    # Find company name - try h1 tag first
+    try:
+        h1_elements = await page.locator('h1').all()
+        if h1_elements:
+            company = await h1_elements[0].inner_text()
+            company = company.strip()
+    except Exception:
         pass
-    else:
-        if len(content_elements) >= 3:
-            email = await content_elements[-3].inner_text()
+    
+    # Try alternative selectors for company name if not found
+    if not company:
+        try:
+            title_elements = await page.locator('.title').all()
+            if title_elements:
+                company = await title_elements[0].inner_text()
+                company = company.strip()
+        except Exception:
+            pass
+    
+    # Extract email and phone from .content elements
+    try:
+        content_elements = await page.locator('.content').all()
+        
+        # Search through all content elements to find email and phone
+        for elem in content_elements:
+            text = await elem.inner_text()
+            text = text.strip()
+            
+            # Find email (contains @)
+            if "@" in text and not email:
+                email = text
+            
+            # Find phone (looks like a phone number)
+            if not phone and "@" not in text:
+                clean_text = text.replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+                if clean_text.isdigit() and 7 <= len(clean_text) <= 15:
+                    # Prefer the one with + prefix if available
+                    if not phone or (text.startswith("+") and not phone.startswith("+")):
+                        phone = text
+    except Exception:
+        pass
+    
     return company, email, phone
 
 
-async def fetch_data_with_retry(page, url, retry=10):
-    for _ in range(retry):
+async def fetch_data_with_retry(page, url, retry=3):
+    for attempt in range(retry):
         try:
             company, email, phone = await get_index_context(page, url)
             return company, email, phone
         except Exception as e:
-            print(f"Failed to fetch data from {url}. Retrying...")
-            print(f"Error: {e}")
+            print(f"Attempt {attempt + 1}/{retry} failed for {url}: {str(e)[:100]}")
+            if attempt < retry - 1:
+                # 等待一段时间后重试，使用指数退避
+                wait_time = (attempt + 1) * 5
+                print(f"Waiting {wait_time} seconds before retry...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"Failed to fetch data from {url} after {retry} attempts")
     return None, None, None
 
 
-async def main(cookie_value, country_id, country_name, total):
-    cookie_value = "e49894fe8726412cbf959d9eff911748"
-    country_name, country_id, uid_list, total, count = get_all_uid(country_id,country_name,total)
+async def main(country_id, country_name, total):
+    cookie_value = "b285788fb6414b31b22edea249087d42"
+
+    country_name, country_id, uid_list, total, count = get_all_uid(country_id, country_name, total)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
+        # 添加更多浏览器选项来模拟真实用户
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+            ]
+        )
         context = await browser.new_context(
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-        # context = await browser.new_context()
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport={'width': 1920, 'height': 1080},
+            locale='zh-CN',
+            timezone_id='Asia/Shanghai',
+        )
+        
+        # 添加额外的 JavaScript 来隐藏自动化特征
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+        
         page = await context.new_page()
+        
+        # 设置默认超时
+        page.set_default_timeout(60000)
+        
         await context.add_cookies([{
             "domain": ".jctrans.com",
             "name": "JC-JAVA-Token-Root",
@@ -110,14 +171,25 @@ async def main(cookie_value, country_id, country_name, total):
             "value": cookie_value
         }])
 
-        # count = 0
         for uid in uid_list:
             url = 'https://www.jctrans.com/cn/store/home/' + uid
+            
+            # 添加随机延迟，模拟人类行为（2-5秒）
+            delay = random.uniform(0, 0.2)
+            print(f"Waiting {delay:.1f}s before next request...")
+            await asyncio.sleep(delay)
+            
             company, email, phone = await fetch_data_with_retry(page, url)
             count += 1
-            print(count, company, email, phone)
-            filename = f"{country_name}_{country_id}_{total}.xlsx"
-            append_to_excel([company, email, phone], filename)
+            print(f"{count}: {company} | {email} | {phone}")
+            
+            # 只有成功获取数据才保存
+            if company or email or phone:
+                filename = f"{country_name}_{country_id}_{total}.xlsx"
+                append_to_excel([company, email, phone], filename)
+            else:
+                print(f"Warning: No data extracted for {url}")
+                
         await browser.close()
 
 

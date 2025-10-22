@@ -7,4 +7,4 @@ if __name__ == '__main__':
     country_id = 66
     country_name = "Thailand"
     total = 933
-    asyncio.run(main(cookie_value, country_id, country_name, total))
+    asyncio.run(main(country_id, country_name, total))
